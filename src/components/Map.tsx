@@ -37,6 +37,7 @@ import { signOutAction } from "@/app/actions/auth";
 import { User } from "@supabase/supabase-js";
 import { LogIn, LogOut, User as UserIcon, Search, Loader2, Sparkles, Globe } from "lucide-react";
 import { liveSearch } from "@/app/actions/liveSearch";
+import { createClient } from "@/lib/supabase/client";
 
 const BANGALORE_CENTER = { lat: 12.9716, lng: 77.5946 };
 
@@ -119,7 +120,11 @@ const MarkerWithRef = ({
       // Center the custom marker on the coordinate
       className="transform -translate-x-1/2 -translate-y-1/2"
     >
-      <div className="bg-white px-3 py-1.5 rounded-full shadow-lg border border-gray-200 hover:scale-110 hover:bg-blue-600 hover:text-white transition-all cursor-pointer group">
+      <div className={`
+        bg-white px-3 py-1.5 rounded-full shadow-lg border hover:scale-110 transition-all cursor-pointer group flex items-center gap-1.5
+        ${listing.is_live ? "border-blue-400 bg-blue-50/50" : "border-gray-200 hover:bg-blue-600 hover:text-white"}
+      `}>
+        {listing.is_live && <Globe className="w-3 h-3 text-blue-600" />}
         <span className="text-xs font-bold whitespace-nowrap">
           ₹{(listing.rent / 1000).toFixed(0)}k | {listing.bhk_type}
         </span>
@@ -151,6 +156,10 @@ export default function InteractiveMap({
   const [radius, setRadius] = useState(2000);
   const [listings, setListings] = useState<any[]>([]);
   const [selectedListing, setSelectedListing] = useState<any | null>(null);
+
+  // Live Search State
+  const [isLiveSearching, setIsLiveSearching] = useState(false);
+  const [liveSearchQuery, setLiveSearchQuery] = useState("");
 
   // Auth Modal State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -195,10 +204,66 @@ export default function InteractiveMap({
     fetchListings();
   }, [searchPos, radius]);
 
+  // Realtime subscription for live updates
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'listings'
+        },
+        async (payload: any) => {
+          console.log('New listing received!', payload);
+          // When a new listing is inserted, we re-fetch to get the computed lat/lng
+          // Alternatively, we could manually calculate it from the payload if we had the logic here
+          const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius });
+          setListings(data || []);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [searchPos, radius]);
+
   const handleMapClick = (e: any) => {
     if (e.detail.latLng) {
       setNewListingPos(e.detail.latLng);
       setIsModalOpen(true);
+    }
+  };
+
+  const handleLiveSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!liveSearchQuery.trim()) return;
+
+    setIsLiveSearching(true);
+    try {
+      const result = await liveSearch(liveSearchQuery, { lat: mapCenter.lat, lng: mapCenter.lng });
+      if ('listings' in result && result.listings) {
+        // Merge with existing listings, filtering out duplicates by ID if any
+        setListings(prev => {
+          const existingIds = new Set(prev.map(l => l.id));
+          const newOnes = result.listings.filter((l: any) => !existingIds.has(l.id));
+          return [...prev, ...newOnes];
+        });
+        
+        // If results found, pan to the first one
+        if (result.listings.length > 0) {
+          setMapCenter({ lat: result.listings[0].lat, lng: result.listings[0].lng });
+        }
+      } else if ('error' in result) {
+        alert(result.error);
+      }
+    } catch (err) {
+      console.error("Search failed:", err);
+    } finally {
+      setIsLiveSearching(false);
     }
   };
 
@@ -262,15 +327,33 @@ export default function InteractiveMap({
               onCloseClick={() => setSelectedListing(null)}
             >
               <div className="p-2 max-w-xs">
-                <div className="flex gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2">
                   <Badge variant="secondary">₹{selectedListing.rent.toLocaleString()}</Badge>
                   <Badge variant="outline">{selectedListing.bhk_type}</Badge>
+                  {selectedListing.is_live && (
+                    <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200 flex items-center gap-1">
+                      <Globe className="w-3 h-3" />
+                      Live
+                    </Badge>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-1">
+                {selectedListing.title && (
+                  <p className="text-xs font-semibold mb-2 line-clamp-2">{selectedListing.title}</p>
+                )}
+                <div className="flex flex-wrap gap-1 mb-3">
                   {selectedListing.amenities?.map((a: string) => (
                     <Badge key={a} variant="outline" className="text-[10px]">{a}</Badge>
                   ))}
                 </div>
+                {selectedListing.source_url && (
+                  <Button 
+                    variant="link" 
+                    className="h-auto p-0 text-blue-600 text-xs font-medium"
+                    onClick={() => window.open(selectedListing.source_url, '_blank')}
+                  >
+                    View Original Listing →
+                  </Button>
+                )}
               </div>
             </InfoWindow>
           )}
@@ -289,6 +372,40 @@ export default function InteractiveMap({
           }
         }}
       />
+
+      {/* Floating Search Bar */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-full max-w-md px-4">
+        <form onSubmit={handleLiveSearch} className="relative group">
+          <div className="absolute inset-0 bg-white/40 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 -m-1 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div className="relative bg-white/90 backdrop-blur-md rounded-2xl shadow-xl border border-gray-200 p-1 flex items-center gap-2">
+            <div className="pl-3 text-gray-400">
+              <Sparkles className="w-5 h-5 animate-pulse text-blue-500" />
+            </div>
+            <Input 
+              placeholder="Ask for anything... (e.g. 2BHK near Indiranagar < 30k)"
+              className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm h-10 px-1 placeholder:text-gray-400"
+              value={liveSearchQuery}
+              onChange={(e) => setLiveSearchQuery(e.target.value)}
+              disabled={isLiveSearching}
+            />
+            <Button 
+              type="submit" 
+              size="sm" 
+              className="rounded-xl bg-blue-600 hover:bg-blue-700 h-9 px-4 shrink-0 transition-all active:scale-95"
+              disabled={isLiveSearching}
+            >
+              {isLiveSearching ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Search className="w-4 h-4 mr-2" />
+                  Search
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </div>
 
       {/* Top Right Actions */}
       <div className="absolute top-4 right-4 z-10 flex gap-2">
