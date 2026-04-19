@@ -32,6 +32,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { getListings } from "@/app/actions/listings";
 import { createListing } from "@/app/actions/createListing";
+import { AuthModal } from "./AuthModal";
+import { signOutAction } from "@/app/actions/auth";
+import { User } from "@supabase/supabase-js";
+import { LogIn, LogOut, User as UserIcon } from "lucide-react";
 
 const BANGALORE_CENTER = { lat: 12.9716, lng: 77.5946 };
 
@@ -128,11 +132,22 @@ const MapHandler = ({ center }: { center: { lat: number; lng: number } }) => {
   return null;
 };
 
-export default function InteractiveMap({ apiKey }: { apiKey: string }) {
+export default function InteractiveMap({ 
+  apiKey,
+  initialUser
+}: { 
+  apiKey: string,
+  initialUser: User | null
+}) {
+  const [user, setUser] = useState<User | null>(initialUser);
   const [searchPos, setSearchPos] = useState(BANGALORE_CENTER);
   const [radius, setRadius] = useState(2000);
   const [listings, setListings] = useState<any[]>([]);
   const [selectedListing, setSelectedListing] = useState<any | null>(null);
+
+  // Auth Modal State
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"post" | null>(null);
 
   // Map state
   const [mapCenter, setMapCenter] = useState(BANGALORE_CENTER);
@@ -254,6 +269,47 @@ export default function InteractiveMap({ apiKey }: { apiKey: string }) {
           )}
         </Map>
       </APIProvider>
+
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onOpenChange={setIsAuthModalOpen}
+        onSuccess={async (authenticatedUser) => {
+          setUser(authenticatedUser);
+          if (pendingAction === "post") {
+            setIsModalOpen(true);
+            setPendingAction(null);
+          }
+        }}
+      />
+
+      {/* Top Right Actions */}
+      <div className="absolute top-4 right-4 z-10 flex gap-2">
+        {user ? (
+          <div className="flex gap-2">
+            <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-xl border border-gray-200 flex items-center gap-2">
+              <UserIcon className="w-4 h-4 text-gray-600" />
+              <span className="text-sm font-medium">{user.email}</span>
+            </div>
+            <Button 
+              variant="destructive" 
+              className="rounded-full shadow-xl" 
+              size="icon"
+              onClick={() => signOutAction()}
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        ) : (
+          <Button 
+            className="rounded-full shadow-xl bg-blue-600 hover:bg-blue-700" 
+            onClick={() => setIsAuthModalOpen(true)}
+          >
+            <LogIn className="w-4 h-4 mr-2" />
+            Login
+          </Button>
+        )}
+      </div>
 
       {/* UI Overlay for Search Control */}
       <div className="absolute top-4 left-4 z-10 w-72 bg-white/90 backdrop-blur p-4 rounded-xl shadow-2xl border border-gray-200">

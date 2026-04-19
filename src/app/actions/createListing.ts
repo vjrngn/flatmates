@@ -13,12 +13,14 @@ export async function createListing(formData: {
 }) {
   const supabase = await createClient()
 
+  // We try to get the user, but don't fail if they aren't there
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // For the hackathon, we allow anonymous or test user if not logged in
-  const userId = user?.id || '00000000-0000-0000-0000-000000000000'
+  // If no user, we insert with null user_id (anonymous post)
+  // This avoids FK constraint errors if the fallback user doesn't exist in the DB
+  const userId = user?.id || null
 
   const { data, error } = await supabase.from('listings').insert({
     user_id: userId,

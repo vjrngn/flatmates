@@ -19,6 +19,10 @@
     - SSR-ready client setup (`@supabase/ssr`) for secure server-side database access.
     - Permissive session middleware for automatic token refreshing.
     - Local development stack running via Docker/CLI.
+- [x] **OTP Authentication (Phone):**
+    - Modal-based login flow.
+    - Integrated with Supabase Auth for SMS-based verification.
+    - Floating profile UI for session management.
 - [x] **Geospatial Database (PostGIS):**
     - Enabled `postgis` extension.
     - Schema: `profiles` and `listings` tables.
@@ -43,13 +47,8 @@
 
 ## 🚀 Next Steps (To-Do)
 
-### Authentication
-- [ ] Implement **OTP Login flow** (Email/Phone).
-- [ ] Create `/auth/confirm` callback handler.
-- [ ] Implement "My Listings" view for authenticated users.
-
 ### Product Refinement
-- [ ] **Clustering:** Handle multiple markers at the exact same lat/long (currently they overlap).
 - [ ] **Advanced Filtering:** Add UI toggles for Veg/Non-Veg, Bachelors, etc., to the seeker view.
 - [ ] **Image Support:** Integration with Supabase Storage for property photos.
 - [ ] **Agentic Flow:** Initial design of the verification layer to mark listings as "Verified".
+- [ ] **My Listings:** Create a view for users to manage their own posts.
