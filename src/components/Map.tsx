@@ -1,263 +1,348 @@
-'use client'
+"use client";
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   APIProvider,
   Map,
   AdvancedMarker,
   Pin,
   InfoWindow,
-  MapMouseEvent
-} from '@vis.gl/react-google-maps'
-import { getListings } from '@/app/actions/listings'
-import { createListing } from '@/app/actions/createListing'
-import { Slider } from '@/components/ui/slider'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+  useMap,
+} from "@vis.gl/react-google-maps";
+import { MarkerClusterer, Marker } from "@googlemaps/markerclusterer";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { getListings } from "@/app/actions/listings";
+import { createListing } from "@/app/actions/createListing";
 
-const AMENITIES_OPTIONS = [
-  { id: 'security', label: '24/7 Security' },
-  { id: 'pool', label: 'Swimming Pool' },
-  { id: 'gym', label: 'Gym' },
-  { id: 'parking', label: 'Parking' },
-  { id: 'gated', label: 'Gated Community' },
-]
+const BANGALORE_CENTER = { lat: 12.9716, lng: 77.5946 };
 
-export default function MapComponent({ apiKey }: { apiKey: string }) {
-  const [listings, setListings] = useState<any[]>([])
-  const [selectedListing, setSelectedListing] = useState<any | null>(null)
-  
-  // Seeker's Search State
-  const [searchPos, setSearchPos] = useState({ lat: 12.9716, lng: 77.5946 })
-  const [radius, setRadius] = useState(5000)
+// Component to handle clustering
+const ListingMarkers = ({ 
+  listings, 
+  onMarkerClick 
+}: { 
+  listings: any[], 
+  onMarkerClick: (listing: any) => void 
+}) => {
+  const map = useMap();
+  const [markers, setMarkers] = useState<{ [key: string]: Marker }>({});
+  const clusterer = useRef<MarkerClusterer | null>(null);
 
-  // Poster's State
-  const [newListingPos, setNewListingPos] = useState<{ lat: number; lng: number } | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const loadListings = useCallback(async () => {
-    const data = await getListings({ 
-      lat: searchPos.lat, 
-      lng: searchPos.lng, 
-      radius 
-    })
-    setListings(data)
-  }, [searchPos, radius])
-
+  // Initialize Clusterer
   useEffect(() => {
-    loadListings()
-  }, [loadListings])
-
-  const onMapClick = (e: MapMouseEvent) => {
-    if (e.detail.latLng) {
-      setNewListingPos({ lat: e.detail.latLng.lat, lng: e.detail.latLng.lng })
+    if (!map) return;
+    if (!clusterer.current) {
+      clusterer.current = new MarkerClusterer({ map });
     }
-  }
+  }, [map]);
 
-  const handleCreateListing = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!newListingPos) return
-    setIsSubmitting(true)
-
-    const formData = new FormData(e.currentTarget)
-    const selectedAmenities = AMENITIES_OPTIONS
-      .filter(opt => formData.get(opt.id) === 'on')
-      .map(opt => opt.id)
-
-    try {
-      await createListing({
-        lat: newListingPos.lat,
-        lng: newListingPos.lng,
-        bhk_type: formData.get('bhk_type') as string,
-        rent: parseInt(formData.get('rent') as string),
-        amenities: selectedAmenities,
-        occupancy_rules: {
-          diet: formData.get('diet'),
-          pets: formData.get('pets') === 'on',
-          gender: formData.get('gender'),
-        }
-      })
-      setNewListingPos(null)
-      loadListings()
-    } catch (err) {
-      alert('Failed to create listing')
-    } finally {
-      setIsSubmitting(false)
+  // Update clusterer when markers state changes
+  useEffect(() => {
+    if (clusterer.current) {
+      clusterer.current.clearMarkers();
+      clusterer.current.addMarkers(Object.values(markers));
     }
-  }
+  }, [markers]);
+
+  // Callback to collect marker instances from AdvancedMarker
+  const setMarkerRef = useCallback((marker: Marker | null, key: string) => {
+    setMarkers((prev) => {
+      if (marker) {
+        if (prev[key] === marker) return prev;
+        return { ...prev, [key]: marker };
+      } else {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+    });
+  }, []);
 
   return (
-    <APIProvider apiKey={apiKey}>
-      <div className="relative h-screen w-screen">
+    <>
+      {listings.map((listing) => (
+        <MarkerWithRef
+          key={listing.id}
+          listing={listing}
+          onMarkerClick={onMarkerClick}
+          setMarkerRef={setMarkerRef}
+        />
+      ))}
+    </>
+  );
+};
+
+// Helper component to keep the ref stable for each marker
+const MarkerWithRef = ({ 
+  listing, 
+  onMarkerClick, 
+  setMarkerRef 
+}: { 
+  listing: any, 
+  onMarkerClick: (listing: any) => void,
+  setMarkerRef: (marker: Marker | null, key: string) => void
+}) => {
+  const ref = useCallback((marker: Marker | null) => {
+    setMarkerRef(marker as unknown as Marker, listing.id);
+  }, [listing.id, setMarkerRef]);
+
+  return (
+    <AdvancedMarker
+      position={{ lat: listing.lat, lng: listing.lng }}
+      ref={ref}
+      onClick={() => onMarkerClick(listing)}
+    >
+      <Pin background={"#FBBC04"} glyphColor={"#000"} borderColor={"#000"} />
+    </AdvancedMarker>
+  );
+};
+
+// Component to handle map centering without fighting user interaction
+const MapHandler = ({ center }: { center: { lat: number; lng: number } }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (map && center) {
+      map.panTo(center);
+    }
+  }, [map, center]);
+  return null;
+};
+
+export default function InteractiveMap({ apiKey }: { apiKey: string }) {
+  const [searchPos, setSearchPos] = useState(BANGALORE_CENTER);
+  const [radius, setRadius] = useState(2000);
+  const [listings, setListings] = useState<any[]>([]);
+  const [selectedListing, setSelectedListing] = useState<any | null>(null);
+
+  // Map state
+  const [mapCenter, setMapCenter] = useState(BANGALORE_CENTER);
+  const [zoom, setZoom] = useState(13);
+
+  // Get user's location on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const newPos = { lat: latitude, lng: longitude };
+          setSearchPos(newPos);
+          setMapCenter(newPos);
+        },
+        (error) => {
+          console.warn("Geolocation permission denied or failed:", error.message);
+        }
+      );
+    }
+  }, []);
+  
+  // Post Listing State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newListingPos, setNewListingPos] = useState<{lat: number, lng: number} | null>(null);
+  const [formData, setFormData] = useState({
+    rent: "",
+    bhk_type: "2BHK",
+    amenities: [] as string[]
+  });
+
+  // Fetch listings when search position or radius changes
+  useEffect(() => {
+    const fetchListings = async () => {
+      const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius });
+      setListings(data || []);
+    };
+    fetchListings();
+  }, [searchPos, radius]);
+
+  const handleMapClick = (e: any) => {
+    if (e.detail.latLng) {
+      setNewListingPos(e.detail.latLng);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCreateListing = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newListingPos) return;
+
+    const res = await createListing({
+      rent: parseInt(formData.rent),
+      bhk_type: formData.bhk_type,
+      lat: newListingPos.lat,
+      lng: newListingPos.lng,
+      amenities: formData.amenities,
+      occupancy_rules: {} // Default for now
+    });
+
+    if (res.success) {
+      setIsModalOpen(false);
+      setFormData({ rent: "", bhk_type: "2BHK", amenities: [] });
+      // Refresh listings
+      const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius });
+      setListings(data || []);
+    }
+  };
+
+  return (
+    <div className="relative w-full h-screen">
+      <APIProvider apiKey={apiKey}>
         <Map
-          defaultCenter={{ lat: 12.9716, lng: 77.5946 }}
+          defaultCenter={BANGALORE_CENTER}
           defaultZoom={13}
-          mapId="FLATMATES_MAP_ID"
-          gestureHandling={'greedy'}
+          gestureHandling={"greedy"}
           disableDefaultUI={true}
-          onClick={onMapClick}
+          mapId="bf51a910020fa25a" // Required for AdvancedMarker
+          onClick={handleMapClick}
         >
+          <MapHandler center={mapCenter} />
+          {/* Search Origin Pin */}
           <AdvancedMarker
             position={searchPos}
-            draggable={true}
+            draggable
             onDragEnd={(e) => {
-              if (e.latLng) setSearchPos({ lat: e.latLng.lat(), lng: e.latLng.lng() })
+              if (e.latLng) {
+                const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                setSearchPos(newPos);
+              }
             }}
           >
-            <Pin background={'#4285F4'} glyphColor={'#fff'} borderColor={'#000'} />
+            <Pin background={"#4285F4"} glyphColor={"#000"} borderColor={"#000"} />
           </AdvancedMarker>
 
-          {listings.map((listing) => (
-            <AdvancedMarker
-              key={listing.id}
-              position={{ lat: listing.lat, lng: listing.lng }}
-              onClick={(e) => {
-                // Prevent map click when clicking a marker
-                e.stopPropagations?.()
-                setSelectedListing(listing)
-              }}
-            >
-              <Pin background={'#FBBC04'} glyphColor={'#000'} borderColor={'#000'} />
-            </AdvancedMarker>
-          ))}
+          {/* Clustered Listings */}
+          <ListingMarkers 
+            listings={listings} 
+            onMarkerClick={setSelectedListing} 
+          />
 
           {selectedListing && (
             <InfoWindow
               position={{ lat: selectedListing.lat, lng: selectedListing.lng }}
               onCloseClick={() => setSelectedListing(null)}
             >
-              <div className="p-2 text-black max-w-xs">
-                <h2 className="font-bold text-lg">{selectedListing.bhk_type}</h2>
-                <p className="text-sm font-semibold text-green-600">₹{selectedListing.rent} / month</p>
-                <div className="mt-2 flex flex-wrap gap-1">
+              <div className="p-2 max-w-xs">
+                <div className="flex gap-2 mb-2">
+                  <Badge variant="secondary">₹{selectedListing.rent.toLocaleString()}</Badge>
+                  <Badge variant="outline">{selectedListing.bhk_type}</Badge>
+                </div>
+                <div className="flex flex-wrap gap-1">
                   {selectedListing.amenities?.map((a: string) => (
-                    <Badge key={a} variant="secondary" className="text-[10px]">{a}</Badge>
+                    <Badge key={a} variant="outline" className="text-[10px]">{a}</Badge>
                   ))}
                 </div>
               </div>
             </InfoWindow>
           )}
         </Map>
+      </APIProvider>
 
-        {/* Create Listing Dialog */}
-        <Dialog open={!!newListingPos} onOpenChange={(open) => !open && setNewListingPos(null)}>
-          <DialogContent className="sm:max-w-[425px] bg-white text-black">
-            <DialogHeader>
-              <DialogTitle>Post a Listing</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateListing} className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="bhk_type" className="text-right text-xs">Type</Label>
-                <Select name="bhk_type" defaultValue="1BHK">
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select type" />
+      {/* UI Overlay for Search Control */}
+      <div className="absolute top-4 left-4 z-10 w-72 bg-white/90 backdrop-blur p-4 rounded-xl shadow-2xl border border-gray-200">
+        <h2 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          📍 Search Radius: <span className="text-blue-600">{(radius / 1000).toFixed(1)} km</span>
+        </h2>
+        <Slider
+          value={[radius]}
+          onValueChange={(val: any) => {
+            const nextValue = Array.isArray(val) ? val[0] : val;
+            if (typeof nextValue === "number" && !isNaN(nextValue)) {
+              setRadius(nextValue);
+            }
+          }}
+          min={500}
+          max={20000}
+          step={500}
+          className="mb-4"
+        />
+        <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+          Drag the blue pin to change location
+        </p>
+      </div>
+
+      {/* Post Listing Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Post New Listing</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateListing} className="space-y-4 pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="rent">Monthly Rent (₹)</Label>
+                <Input 
+                  id="rent" 
+                  type="number" 
+                  placeholder="25000" 
+                  value={formData.rent}
+                  onChange={e => setFormData({...formData, rent: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bhk">BHK Type</Label>
+                <Select 
+                  value={formData.bhk_type}
+                  onValueChange={val => setFormData({...formData, bhk_type: val})}
+                >
+                  <SelectTrigger id="bhk">
+                    <SelectValue placeholder="Select" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1RK">1 RK</SelectItem>
-                    <SelectItem value="1BHK">1 BHK</SelectItem>
-                    <SelectItem value="2BHK">2 BHK</SelectItem>
-                    <SelectItem value="3BHK">3 BHK</SelectItem>
-                    <SelectItem value="Shared">Shared Room</SelectItem>
+                    <SelectItem value="1RK">1RK</SelectItem>
+                    <SelectItem value="1BHK">1BHK</SelectItem>
+                    <SelectItem value="2BHK">2BHK</SelectItem>
+                    <SelectItem value="3BHK">3BHK</SelectItem>
+                    <SelectItem value="4BHK">4BHK</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="rent" className="text-right text-xs">Rent (₹)</Label>
-                <Input id="rent" name="rent" type="number" defaultValue="15000" className="col-span-3" />
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-xs">Amenities</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {AMENITIES_OPTIONS.map((opt) => (
-                    <div key={opt.id} className="flex items-center space-x-2">
-                      <Checkbox id={opt.id} name={opt.id} />
-                      <label htmlFor={opt.id} className="text-[10px] leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{opt.label}</label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2 border-t pt-2">
-                <Label className="text-xs">Occupancy Rules (India Context)</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[10px]">Diet</Label>
-                    <Select name="diet" defaultValue="any">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="any">Any</SelectItem>
-                        <SelectItem value="veg">Veg Only</SelectItem>
-                      </SelectContent>
-                    </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Amenities</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {["Gym", "Pool", "Security", "Parking", "Elevator", "Power Backup"].map(amenity => (
+                  <div key={amenity} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={amenity} 
+                      onCheckedChange={(checked) => {
+                        const next = checked 
+                          ? [...formData.amenities, amenity]
+                          : formData.amenities.filter(a => a !== amenity);
+                        setFormData({...formData, amenities: next});
+                      }}
+                    />
+                    <label htmlFor={amenity} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      {amenity}
+                    </label>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px]">Gender</Label>
-                    <Select name="gender" defaultValue="any">
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="any">Any</SelectItem>
-                        <SelectItem value="male">Male Only</SelectItem>
-                        <SelectItem value="female">Female Only</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2 mt-2">
-                  <Checkbox id="pets" name="pets" />
-                  <Label htmlFor="pets" className="text-[10px]">Pets Allowed?</Label>
-                </div>
+                ))}
               </div>
-
-              <DialogFooter>
-                <Button type="submit" disabled={isSubmitting} className="w-full">
-                  {isSubmitting ? 'Posting...' : 'Post Listing'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* Search Slider */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-md px-4">
-          <Card className="bg-white/90 backdrop-blur shadow-xl border-none">
-            <CardContent className="pt-6">
-              <div className="flex justify-between mb-4 items-center">
-                <span className="text-sm font-medium text-black">Search Radius</span>
-                <Badge variant="outline" className="text-black border-black/20">{(radius / 1000).toFixed(1)} km</Badge>
-              </div>
-              <Slider
-                defaultValue={[5000]}
-                max={20000}
-                min={500}
-                step={500}
-                onValueChange={(val) => {
-                  const newValue = Array.isArray(val) ? val[0] : val
-                  setRadius(newValue)
-                }}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </APIProvider>
-  )
+            </div>
+            <DialogFooter>
+              <Button type="submit" className="w-full">Post Listing</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
