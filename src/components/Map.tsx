@@ -115,8 +115,14 @@ const MarkerWithRef = ({
       position={{ lat: listing.lat, lng: listing.lng }}
       ref={ref}
       onClick={() => onMarkerClick(listing)}
+      // Center the custom marker on the coordinate
+      className="transform -translate-x-1/2 -translate-y-1/2"
     >
-      <Pin background={"#FBBC04"} glyphColor={"#000"} borderColor={"#000"} />
+      <div className="bg-white px-3 py-1.5 rounded-full shadow-lg border border-gray-200 hover:scale-110 hover:bg-blue-600 hover:text-white transition-all cursor-pointer group">
+        <span className="text-xs font-bold whitespace-nowrap">
+          ₹{(listing.rent / 1000).toFixed(0)}k | {listing.bhk_type}
+        </span>
+      </div>
     </AdvancedMarker>
   );
 };
