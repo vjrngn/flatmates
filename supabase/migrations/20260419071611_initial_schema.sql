@@ -1,5 +1,5 @@
 -- Enable PostGIS extension for geographic queries
-CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA extensions;
 
 -- Profiles table (linked to Supabase Auth)
 CREATE TABLE IF NOT EXISTS profiles (
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS listings (
   user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
   
   -- Geographic point (SRID 4326 is standard WGS84)
-  location geography(point, 4326) NOT NULL,
+  location extensions.geography(point, 4326) NOT NULL,
   
   -- Details
   bhk_type text NOT NULL, -- e.g. '1RK', '1BHK', '2BHK', '3BHK', 'Shared'
@@ -60,8 +60,8 @@ BEGIN
   SELECT 
     l.id,
     l.user_id,
-    ST_Y(l.location::geometry) as lat,
-    ST_X(l.location::geometry) as lng,
+    extensions.ST_Y(l.location::extensions.geometry) as lat,
+    extensions.ST_X(l.location::extensions.geometry) as lng,
     l.bhk_type,
     l.rent,
     l.amenities,
@@ -71,9 +71,9 @@ BEGIN
   FROM listings l
   WHERE 
     (search_lat IS NULL OR search_lng IS NULL) OR
-    ST_DWithin(
+    extensions.ST_DWithin(
       l.location, 
-      ST_SetSRID(ST_MakePoint(search_lng, search_lat), 4326)::geography, 
+      extensions.ST_SetSRID(extensions.ST_MakePoint(search_lng, search_lat), 4326)::extensions.geography, 
       radius_meters
     );
 END;

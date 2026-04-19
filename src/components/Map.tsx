@@ -35,7 +35,8 @@ import { createListing } from "@/app/actions/createListing";
 import { AuthModal } from "./AuthModal";
 import { signOutAction } from "@/app/actions/auth";
 import { User } from "@supabase/supabase-js";
-import { LogIn, LogOut, User as UserIcon } from "lucide-react";
+import { LogIn, LogOut, User as UserIcon, Search, Loader2, Sparkles, Globe } from "lucide-react";
+import { liveSearch } from "@/app/actions/liveSearch";
 
 const BANGALORE_CENTER = { lat: 12.9716, lng: 77.5946 };
 
@@ -363,7 +364,7 @@ export default function InteractiveMap({
                 <Label htmlFor="bhk">BHK Type</Label>
                 <Select 
                   value={formData.bhk_type}
-                  onValueChange={val => setFormData({...formData, bhk_type: val})}
+                  onValueChange={val => setFormData({...formData, bhk_type: val || "2BHK"})}
                 >
                   <SelectTrigger id="bhk">
                     <SelectValue placeholder="Select" />
