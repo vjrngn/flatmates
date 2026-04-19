@@ -37,8 +37,12 @@ CREATE TABLE IF NOT EXISTS listings (
 -- Index for fast proximity searches
 CREATE INDEX IF NOT EXISTS listings_location_idx ON listings USING GIST (location);
 
--- Function to get listings with lat/lng for the map
-CREATE OR REPLACE FUNCTION get_listings_with_coords()
+-- Function to get listings with lat/lng and optional radius search
+CREATE OR REPLACE FUNCTION get_listings_with_coords(
+  search_lat float8 DEFAULT NULL,
+  search_lng float8 DEFAULT NULL,
+  radius_meters float8 DEFAULT 5000
+)
 RETURNS TABLE (
   id uuid,
   user_id uuid,
@@ -64,7 +68,14 @@ BEGIN
     l.occupancy_rules,
     l.is_verified,
     l.created_at
-  FROM listings l;
+  FROM listings l
+  WHERE 
+    (search_lat IS NULL OR search_lng IS NULL) OR
+    ST_DWithin(
+      l.location, 
+      ST_SetSRID(ST_MakePoint(search_lng, search_lat), 4326)::geography, 
+      radius_meters
+    );
 END;
 $$ LANGUAGE plpgsql STABLE;
 
