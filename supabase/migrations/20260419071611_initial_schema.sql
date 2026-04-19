@@ -37,6 +37,37 @@ CREATE TABLE IF NOT EXISTS listings (
 -- Index for fast proximity searches
 CREATE INDEX IF NOT EXISTS listings_location_idx ON listings USING GIST (location);
 
+-- Function to get listings with lat/lng for the map
+CREATE OR REPLACE FUNCTION get_listings_with_coords()
+RETURNS TABLE (
+  id uuid,
+  user_id uuid,
+  lat float8,
+  lng float8,
+  bhk_type text,
+  rent numeric,
+  amenities text[],
+  occupancy_rules jsonb,
+  is_verified boolean,
+  created_at timestamptz
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    l.id,
+    l.user_id,
+    ST_Y(l.location::geometry) as lat,
+    ST_X(l.location::geometry) as lng,
+    l.bhk_type,
+    l.rent,
+    l.amenities,
+    l.occupancy_rules,
+    l.is_verified,
+    l.created_at
+  FROM listings l;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
 -- Automatically update updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
