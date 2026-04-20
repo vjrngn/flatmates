@@ -27,6 +27,8 @@ export async function liveSearch(query: string, userLocation?: { lat: number, ln
       You can search the local database using 'search_listings' and the web using 'search_web'.
       Always try to find listings that match the user's criteria (rent, BHK type, location).
       
+      CRITICAL: For web search results, you MUST use the 'get_coordinates' tool for each listing to get accurate latitude and longitude before returning the final JSON.
+      
       CRITICAL: You MUST return the final answer as a valid JSON object with a 'listings' key. 
       The 'listings' key must contain an array of objects with the following schema:
       {
@@ -44,6 +46,27 @@ export async function liveSearch(query: string, userLocation?: { lat: number, ln
       Do not include any other text in your final response besides the JSON.`,
       prompt: `User query: "${query}" near location: ${userLocation?.lat}, ${userLocation?.lng}`,
       tools: {
+        get_coordinates: tool({
+          description: 'Get latitude and longitude for a given address using Google Maps.',
+          inputSchema: z.object({
+            address: z.string(),
+          }),
+          execute: async ({ address }: { address: string }) => {
+            const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+            if (!googleKey) throw new Error("Google Maps API key is missing.");
+            
+            const response = await fetch(
+              `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${googleKey}`
+            );
+            const data = await response.json();
+            
+            if (data.status === "OK" && data.results.length > 0) {
+              const { lat, lng } = data.results[0].geometry.location;
+              return { lat, lng };
+            }
+            throw new Error(`Could not find coordinates for: ${address}`);
+          },
+        }),
         search_listings: tool({
           description: 'Search the local database for rental listings using SQL-like filters.',
           inputSchema: z.object({
