@@ -38,6 +38,7 @@ export async function liveSearch(query: string, userLocation?: { lat: number, ln
         "amenities": ["string"],
         "source_url": "string",
         "title": "string",
+        "description": "string",
         "is_live": boolean (true if from web, false if from database)
       }
       Do not include any other text in your final response besides the JSON.`,
@@ -100,6 +101,27 @@ export async function liveSearch(query: string, userLocation?: { lat: number, ln
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      const listings = parsed.listings;
+
+      // Save web results back to database
+      const webListings = listings.filter((l: any) => l.is_live);
+      if (webListings.length > 0) {
+        const supabase = await createClient();
+        const { error: saveError } = await supabase.from('listings').upsert(
+          webListings.map((l: any) => ({
+            title: l.title,
+            description: l.description,
+            rent: l.rent,
+            bhk_type: l.bhk_type,
+            amenities: l.amenities,
+            source_url: l.source_url,
+            location: `POINT(${l.lng} ${l.lat})`
+          })),
+          { onConflict: 'source_url' }
+        );
+        if (saveError) console.error("Error saving web listings:", saveError);
+      }
+
       return { listings: parsed.listings };
     }
 
