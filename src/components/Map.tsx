@@ -154,6 +154,7 @@ export default function InteractiveMap({
   const [user, setUser] = useState<User | null>(initialUser);
   const [searchPos, setSearchPos] = useState(BANGALORE_CENTER);
   const [radius, setRadius] = useState(2000);
+  const [committedRadius, setCommittedRadius] = useState(2000);
   const [listings, setListings] = useState<any[]>([]);
   const [selectedListing, setSelectedListing] = useState<any | null>(null);
 
@@ -198,11 +199,11 @@ export default function InteractiveMap({
   // Fetch listings when search position or radius changes
   useEffect(() => {
     const fetchListings = async () => {
-      const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius });
+      const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius: committedRadius });
       setListings(data || []);
     };
     fetchListings();
-  }, [searchPos, radius]);
+  }, [searchPos, committedRadius]);
 
   // Realtime subscription for live updates
   useEffect(() => {
@@ -220,7 +221,7 @@ export default function InteractiveMap({
           console.log('New listing received!', payload);
           // When a new listing is inserted, we re-fetch to get the computed lat/lng
           // Alternatively, we could manually calculate it from the payload if we had the logic here
-          const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius });
+          const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius: committedRadius });
           setListings(data || []);
         }
       )
@@ -229,7 +230,7 @@ export default function InteractiveMap({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [searchPos, radius]);
+  }, [searchPos, committedRadius]);
 
   const handleMapClick = (e: any) => {
     if (e.detail.latLng) {
@@ -284,7 +285,7 @@ export default function InteractiveMap({
       setIsModalOpen(false);
       setFormData({ rent: "", bhk_type: "2BHK", amenities: [] });
       // Refresh listings
-      const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius });
+      const data = await getListings({ lat: searchPos.lat, lng: searchPos.lng, radius: committedRadius });
       setListings(data || []);
     }
   };
@@ -446,6 +447,12 @@ export default function InteractiveMap({
             const nextValue = Array.isArray(val) ? val[0] : val;
             if (typeof nextValue === "number" && !isNaN(nextValue)) {
               setRadius(nextValue);
+            }
+          }}
+          onValueCommitted={(val: any) => {
+            const nextValue = Array.isArray(val) ? val[0] : val;
+            if (typeof nextValue === "number" && !isNaN(nextValue)) {
+              setCommittedRadius(nextValue);
             }
           }}
           min={500}
