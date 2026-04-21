@@ -15,7 +15,6 @@ export async function liveSearch(query: string, userLocation?: { lat: number, ln
   }
 
   const openai = createOpenAI({
-    baseURL: "https://opencode.ai/zen/v1",
     apiKey: oaKey
   });
   const firecrawl = new FirecrawlApp({ apiKey: fcKey });
