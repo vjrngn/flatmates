@@ -12,6 +12,7 @@
     "@ai-sdk/openai": "^3.0.53",
     "@base-ui/react": "^1.4.0",
     "@googlemaps/markerclusterer": "^2.6.2",
+    "@next/third-parties": "^16.2.4",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
     "@vis.gl/react-google-maps": "^1.8.3",

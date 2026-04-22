@@ -25,6 +25,8 @@ export async function liveSearch(query: string, userLocation?: { lat: number, ln
       system: `You are a helpful rental assistant. Your goal is to find rental listings for the user.
       You can search the local database using 'search_listings' and the web using 'search_web'.
       Always try to find listings that match the user's criteria (rent, BHK type, location).
+
+      NOTE: For every query make sure to search the local database first to find existing listings. This is important to avoid unnecessary web searches and to provide faster results.
       
       CRITICAL: For web search results, you MUST use the 'get_coordinates' tool for each listing to get accurate latitude and longitude before returning the final JSON.
       
